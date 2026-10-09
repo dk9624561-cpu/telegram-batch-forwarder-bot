@@ -44,16 +44,22 @@ db.init_db()
 
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
-    """Simple HTTP server handler for Render Web Service health checks."""
+    """Simple HTTP server handler for Render Web Service health checks and UptimeRobot."""
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/plain")
         self.end_headers()
         self.wfile.write(b"OK - Bot is running!")
 
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+
     def log_message(self, format, *args):
         # Silence HTTP server logs to keep console clean
         return
+
 
 
 def start_health_check_server():
