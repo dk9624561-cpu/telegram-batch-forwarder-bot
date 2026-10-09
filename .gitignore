@@ -1,0 +1,17 @@
+# Environment & Secrets
+.env
+
+# Database
+bot_data.db
+bot_data.db-journal
+
+# Python Bytecode & Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# IDE files
+.vscode/
+.idea/
