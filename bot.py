@@ -306,6 +306,8 @@ async def process_channel_post(update: Update, context: ContextTypes.DEFAULT_TYP
             logger.error(f"Failed to send post {post.message_id} to {target_channel}: {e}")
 
 
+from telegram.request import HTTPXRequest
+
 def main():
     """Start the bot application."""
     if not BOT_TOKEN or BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN_HERE":
@@ -313,7 +315,8 @@ def main():
         return
 
     print("🚀 Starting Telegram Batch Forwarder Bot...")
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    request_config = HTTPXRequest(connect_timeout=30.0, read_timeout=30.0, write_timeout=30.0)
+    app = ApplicationBuilder().token(BOT_TOKEN).request(request_config).build()
 
     # Handlers
     app.add_handler(CommandHandler("start", start_command))
@@ -334,6 +337,7 @@ def main():
 
     print("✅ Bot is online and listening for channel posts!")
     app.run_polling(drop_pending_updates=True)
+
 
 
 if __name__ == "__main__":
