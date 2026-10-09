@@ -2,6 +2,8 @@ import os
 import sys
 import re
 import logging
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Ensure UTF-8 output encoding for Windows terminal unicode/emoji support
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
@@ -18,6 +20,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from telegram.request import HTTPXRequest
 
 import database as db
 
@@ -38,6 +41,30 @@ logger = logging.getLogger(__name__)
 
 # Initialize database
 db.init_db()
+
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    """Simple HTTP server handler for Render Web Service health checks."""
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"OK - Bot is running!")
+
+    def log_message(self, format, *args):
+        # Silence HTTP server logs to keep console clean
+        return
+
+
+def start_health_check_server():
+    """Start an HTTP server on $PORT for Render Web Service compatibility."""
+    port = int(os.getenv("PORT", 10000))
+    try:
+        server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+        logger.info(f"Health check HTTP server started on port {port}")
+        server.serve_forever()
+    except Exception as e:
+        logger.warning(f"Could not start health check server on port {port}: {e}")
 
 
 def is_admin(user_id: int) -> bool:
@@ -306,13 +333,14 @@ async def process_channel_post(update: Update, context: ContextTypes.DEFAULT_TYP
             logger.error(f"Failed to send post {post.message_id} to {target_channel}: {e}")
 
 
-from telegram.request import HTTPXRequest
-
 def main():
     """Start the bot application."""
     if not BOT_TOKEN or BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN_HERE":
         print("❌ ERROR: BOT_TOKEN is missing in .env file!")
         return
+
+    # Start health check server thread for Render Web Service compatibility
+    threading.Thread(target=start_health_check_server, daemon=True).start()
 
     print("🚀 Starting Telegram Batch Forwarder Bot...")
     request_config = HTTPXRequest(connect_timeout=30.0, read_timeout=30.0, write_timeout=30.0)
@@ -337,7 +365,6 @@ def main():
 
     print("✅ Bot is online and listening for channel posts!")
     app.run_polling(drop_pending_updates=True)
-
 
 
 if __name__ == "__main__":
