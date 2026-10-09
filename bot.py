@@ -3,6 +3,8 @@ import sys
 import re
 import logging
 import threading
+import asyncio
+import httpx
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Ensure UTF-8 output encoding for Windows terminal unicode/emoji support
@@ -49,7 +51,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/plain")
         self.end_headers()
-        self.wfile.write(b"OK - Bot is running!")
+        self.wfile.write(b"OK - Bot is running 24/7!")
 
     def do_HEAD(self):
         self.send_response(200)
@@ -61,7 +63,6 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         return
 
 
-
 def start_health_check_server():
     """Start an HTTP server on $PORT for Render Web Service compatibility."""
     port = int(os.getenv("PORT", 10000))
@@ -71,6 +72,25 @@ def start_health_check_server():
         server.serve_forever()
     except Exception as e:
         logger.warning(f"Could not start health check server on port {port}: {e}")
+
+
+async def self_ping_loop():
+    """Periodically ping self URL to keep Render free tier awake 24/7."""
+    await asyncio.sleep(15)
+    external_url = os.getenv("RENDER_EXTERNAL_URL")
+    if not external_url:
+        port = os.getenv("PORT", "10000")
+        external_url = f"http://127.0.0.1:{port}"
+
+    logger.info(f"Self-ping keepalive activated for URL: {external_url}")
+    while True:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(external_url)
+                logger.info(f"Keep-alive self-ping status: {resp.status_code}")
+        except Exception as e:
+            logger.warning(f"Keep-alive self-ping notice: {e}")
+        await asyncio.sleep(240)  # Ping every 4 minutes (240s)
 
 
 def is_admin(user_id: int) -> bool:
@@ -339,18 +359,23 @@ async def process_channel_post(update: Update, context: ContextTypes.DEFAULT_TYP
             logger.error(f"Failed to send post {post.message_id} to {target_channel}: {e}")
 
 
+async def post_init(app):
+    """Post initialization hook to start self-ping background loop."""
+    asyncio.create_task(self_ping_loop())
+
+
 def main():
     """Start the bot application."""
     if not BOT_TOKEN or BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN_HERE":
         print("❌ ERROR: BOT_TOKEN is missing in .env file!")
         return
 
-    # Start health check server thread for Render Web Service compatibility
+    # Start health check server thread for Render Web Service & UptimeRobot compatibility
     threading.Thread(target=start_health_check_server, daemon=True).start()
 
     print("🚀 Starting Telegram Batch Forwarder Bot...")
     request_config = HTTPXRequest(connect_timeout=30.0, read_timeout=30.0, write_timeout=30.0)
-    app = ApplicationBuilder().token(BOT_TOKEN).request(request_config).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).request(request_config).post_init(post_init).build()
 
     # Handlers
     app.add_handler(CommandHandler("start", start_command))
